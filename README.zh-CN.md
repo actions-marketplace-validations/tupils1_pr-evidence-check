@@ -8,6 +8,10 @@
 
 除非你把 `fail-on` 设成 `warning` 或 `error`，或者 action 本身配置错了（YAML 不合法、token 为空、事件类型不对），job 都会成功。它不会合并，不会驳回 review，也不会另外造一个检查项。
 
+![超出范围的 pull request 上的粘性评论](docs/scope-comment.png)
+
+上图是 [pull request #9](https://github.com/tupils1/pr-evidence-check/pull/9#issuecomment-6445101391) 的粘性评论。范围是 error，测试证据和审查材料包通过。之后的运行仍更新这一条。
+
 ## 检查什么
 
 ### 1. 范围与关联 issue
@@ -67,13 +71,29 @@ jobs:
 
 示例使用 `tupils1/pr-evidence-check@main`。这个仓库不发布 release tag。不需要配置文件，也不需要 checkout。范围和审查材料包马上就有。测试证据是这个 head SHA 上已经结束的 CI。测试还在跑，评论会写明。
 
-测试和这个 action 在同一个 workflow 里时，放在测试后面，测试失败也要评论：
+测试和这个 action 在同一个 workflow 里时，放在测试后面，测试失败也要评论。测试 job 只需要 `contents: read`。job 上的 `permissions` 会替换 workflow 级权限，所以 evidence job 要重复整段：
 
 ```yaml
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+
   evidence:
     needs: test
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      checks: read
+      actions: read
     steps:
       - uses: tupils1/pr-evidence-check@main
 ```
@@ -90,11 +110,13 @@ fork 触发的 `pull_request` 不能写评论。[`examples/workflow-fork-prs.yml
 
 | 权限 | 原因 |
 | --- | --- |
-| `contents: read` | 读取 base SHA 上的可选配置 |
-| `pull-requests: write` | 创建或更新那一条评论 |
-| `issues: read` | 私有仓库读取关联 issue |
-| `checks: read` | 读取 head SHA 的 check run |
-| `actions: read` | 下载 Actions job 日志 |
+| `contents: read` | 读取 base SHA 上的 `.github/pr-evidence.yml`。 |
+| `pull-requests: write` | 读取 pull request 和改动文件，并创建或更新那一条评论。 |
+| `issues: read` | 读取每个关联 issue 的标题和正文。 |
+| `checks: read` | 列出 head SHA 上的 check run。 |
+| `actions: read` | 列出 Actions run 和 job，并下载 job 日志。 |
+
+不授予 `issues: write`。评论写在 pull request 上，`pull-requests: write` 已经覆盖。
 
 token 读不了日志时，评论仍列出 job 结论，并说明日志不可读。
 
