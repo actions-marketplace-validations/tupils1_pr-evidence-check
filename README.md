@@ -8,6 +8,10 @@ It does three deterministic checks. No LLM. No model API. Nothing from the pull 
 
 The job stays green unless you opt in with `fail-on`, or the action itself is misconfigured (bad YAML, empty token, unsupported event). It never merges, never dismisses reviews, and never creates a separate required check beyond the workflow job you already added.
 
+![Sticky comment on an out-of-scope pull request](docs/scope-comment.png)
+
+The comment above is the sticky comment on [pull request #9](https://github.com/tupils1/pr-evidence-check/pull/9#issuecomment-6445101391). Scope is an error. Test evidence and the review packet passed. Later runs update that same comment.
+
 ## What it checks
 
 ### 1. Scope vs linked issue
@@ -67,13 +71,29 @@ jobs:
 
 Examples use `tupils1/pr-evidence-check@main`. This repository does not publish release tags. No config file. No checkout. Scope and the review packet are ready immediately. Test evidence is whatever CI has already finished for the head SHA. If tests are still running, the comment says that.
 
-To read logs from tests in the **same** workflow, run this after them and keep the comment even when tests fail:
+To read logs from tests in the **same** workflow, run this after them and keep the comment even when tests fail. The test job only needs `contents: read`. A job-level `permissions` key replaces the workflow permissions, so the evidence job repeats the full block:
 
 ```yaml
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+
   evidence:
     needs: test
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      checks: read
+      actions: read
     steps:
       - uses: tupils1/pr-evidence-check@main
 ```
@@ -90,11 +110,13 @@ Config is read from the **base** SHA via the API. A pull request cannot delete `
 
 | Permission | Why |
 | --- | --- |
-| `contents: read` | Read the optional config file at the base SHA |
-| `pull-requests: write` | Create or update the one comment |
-| `issues: read` | Read linked issues on private repositories |
-| `checks: read` | Read check runs for the head SHA |
-| `actions: read` | Download Actions job logs |
+| `contents: read` | Read `.github/pr-evidence.yml` at the base SHA. |
+| `pull-requests: write` | Read the pull request and its files, and create or update the one comment. |
+| `issues: read` | Read the title and body of each linked issue. |
+| `checks: read` | List check runs for the head SHA. |
+| `actions: read` | List Actions runs and jobs, and download job logs. |
+
+`issues: write` is not granted. The comment is on the pull request, and `pull-requests: write` covers that.
 
 If a token cannot read logs, the comment still lists the job conclusion and says the log was not readable.
 
