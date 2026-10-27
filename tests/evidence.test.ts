@@ -3,7 +3,7 @@ import { defaultConfig } from '../src/config'
 import { parseCargo, parseGo, parseJest, parseJunit, parsePytest, parseTestOutput, parseVitest } from '../src/evidence/parse'
 import { buildEvidence, matchesTestName, selectEvidence } from '../src/evidence/select'
 import { compilePattern } from '../src/config'
-import type { CheckRunInfo, TestEvidenceConfig, WorkflowJobInfo } from '../src/types'
+import type { CheckRunInfo, EvidenceItem, TestEvidenceConfig, WorkflowJobInfo } from '../src/types'
 
 function evidenceConfig(overrides: Partial<TestEvidenceConfig> = {}): TestEvidenceConfig {
   return { ...defaultConfig().testEvidence, ...overrides }
@@ -284,4 +284,104 @@ describe('evidence status', () => {
     expect(report.status).toBe('pass')
     expect(report.jobs[0]?.note).toBe('not_downloaded')
   })
+
+  it('counts one run when push and pull_request repeat the same job', () => {
+    const later = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 3,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'push', completedAt: '2026-10-27T15:50:00Z', runId: 1, text: 'Tests:       87 passed, 87 total' }),
+        runItem({ event: 'pull_request', completedAt: '2026-10-27T15:51:00Z', runId: 2, name: 'Test', workflowName: 'ci', text: 'Tests:       87 passed, 2 skipped, 89 total' }),
+        runItem({ event: 'pull_request', completedAt: '2026-10-27T15:51:00Z', runId: 2, name: 'integration', text: 'Tests:       3 passed, 3 total' }),
+      ],
+    })
+    expect(later.jobs).toHaveLength(2)
+    expect(later.jobs.map((job) => job.counts?.passed).sort()).toEqual([3, 87])
+    expect(later.jobs.find((job) => job.name.toLowerCase() === 'test')?.counts).toMatchObject({ passed: 87, skipped: 2 })
+    expect(later.signals.find((signal) => signal.id === 'test_evidence.passed')).toMatchObject({ jobs: 2 })
+
+    const tied = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 2,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'push', completedAt: '2026-10-27T15:50:00Z', runId: 9, text: 'Tests:       1 passed, 1 total' }),
+        runItem({ event: 'pull_request', completedAt: '2026-10-27T15:50:00Z', runId: 2, text: 'Tests:       4 passed, 1 skipped, 5 total' }),
+      ],
+    })
+    expect(tied.jobs).toHaveLength(1)
+    expect(tied.jobs[0]?.counts).toMatchObject({ passed: 4, skipped: 1 })
+
+    const newestFailure = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 2,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'pull_request', completedAt: '2026-10-27T15:50:00Z', runId: 2, text: 'Tests:       87 passed, 87 total' }),
+        runItem({ event: 'push', completedAt: '2026-10-27T15:52:00Z', runId: 3, conclusion: 'failure', text: 'Tests:       1 failed, 86 passed, 87 total' }),
+      ],
+    })
+    expect(newestFailure.status).toBe('warn')
+    expect(newestFailure.jobs).toHaveLength(1)
+    expect(newestFailure.jobs[0]?.counts).toMatchObject({ passed: 86, failed: 1 })
+    expect(newestFailure.signals.find((signal) => signal.id === 'test_evidence.failed')).toMatchObject({ jobs: ['CI / test'] })
+
+    const olderFailure = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 2,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'push', completedAt: '2026-10-27T15:50:00Z', runId: 1, conclusion: 'failure', text: 'Tests:       1 failed, 86 passed, 87 total' }),
+        runItem({ event: 'pull_request', completedAt: '2026-10-27T15:51:00Z', runId: 2, text: 'Tests:       87 passed, 87 total' }),
+      ],
+    })
+    expect(olderFailure.status).toBe('warn')
+    expect(olderFailure.jobs).toHaveLength(1)
+    expect(olderFailure.jobs[0]).toMatchObject({ conclusion: 'failure' })
+    expect(olderFailure.jobs[0]?.counts).toMatchObject({ passed: 87, failed: 0 })
+
+    const sameEvent = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 2,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'pull_request', runId: 1, text: 'Tests:       2 passed, 2 total' }),
+        runItem({ event: 'pull_request', runId: 2, text: 'Tests:       2 passed, 2 total' }),
+      ],
+    })
+    expect(sameEvent.jobs).toHaveLength(2)
+    expect(sameEvent.jobs.reduce((sum, job) => sum + (job.counts?.passed ?? 0), 0)).toBe(4)
+
+    const running = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig(),
+      consideredJobs: 2,
+      consideredChecks: 0,
+      items: [
+        runItem({ event: 'push', completedAt: '2026-10-27T15:50:00Z', runId: 1, text: 'Tests:       5 passed, 5 total' }),
+        runItem({ event: 'pull_request', runId: 4, status: 'in_progress', conclusion: null, text: null }),
+      ],
+    })
+    expect(running.status).toBe('pass')
+    expect(running.jobs).toHaveLength(1)
+    expect(running.jobs[0]?.counts?.passed).toBe(5)
+  })
 })
+
+function runItem(partial: Partial<EvidenceItem>): EvidenceItem {
+  return {
+    source: 'workflow_job',
+    name: 'test',
+    workflowName: 'CI',
+    status: 'completed',
+    conclusion: 'success',
+    text: null,
+    ...partial,
+  }
+}
