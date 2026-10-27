@@ -1,0 +1,62 @@
+# Optional. Delete this file and every check still runs with the defaults.
+# pr-evidence-check reads this file from the pull request's base SHA, so a
+# pull request cannot turn its own checks off.
+
+language: en # en or zh. English and Chinese review-packet headings both count either way.
+
+checks:
+  scope: true
+  test-evidence: true
+  review-packet: true
+
+scope:
+  # Warn when the pull request reaches either threshold.
+  large-diff-lines: 400
+  large-diff-files: 20
+  # A single out-of-scope file at least this many added+deleted lines is called out on its own.
+  large-file-lines: 300
+  # Error (instead of warn) when at least this many judged files are outside scope
+  # and they are at least this fraction of the judged files.
+  outside-scope-error-min: 3
+  outside-scope-error-ratio: 0.5
+  # These paths are not judged for scope. Sensitive-path rules still apply.
+  ignore-paths: []
+  # Added on top of the built-in lockfile, CI, secret, manifest, and config list.
+  sensitive-paths: []
+  # Built-in ids: lockfiles, github-workflows, github-settings, env-files,
+  # credentials, docker, package-manifest, ci-other, tooling-config.
+  ignore-sensitive-ids: []
+  # Defaults are GitHub's closing keywords: close/closes/closed, fix/fixes/fixed,
+  # resolve/resolves/resolved.
+
+test-evidence:
+  # Read logs and parse jest, vitest, pytest, go test, cargo test, and junit summaries.
+  # The action never re-runs tests.
+  parse-logs: true
+  max-log-bytes: 1500000
+  max-log-jobs: 20
+  # error makes a failed test job report error so fail-on: error can catch it.
+  require-passed: false
+  # warn (default) or error when no test-like job or check run exists on the head SHA.
+  no-evidence: warn
+  # Patterns are JavaScript regex. A leading (?i) turns on case-insensitive mode.
+  # Defaults match test, unit, e2e, integration, jest, vitest, pytest, go test,
+  # cargo test, junit, mocha, playwright, cypress, rspec, phpunit, ctest.
+  # job-name-patterns:
+  #   - "(?i)\\btests?\\b"
+  # Names that match a generic test pattern are dropped when they also match
+  # coverage, lint, format, prettier, eslint, pr-evidence, or evidence-check.
+  # A specific runner such as "jest coverage" is kept.
+  # exclude-name-patterns:
+  #   - "(?i)\\bcoverage\\b"
+
+review-packet:
+  min-body-chars: 8
+  # warn (default) or error when a section is missing, empty, or only a placeholder.
+  incomplete: warn
+  # Providing a list replaces the defaults for that section only.
+  # headings:
+  #   intent: ["Intent", "意图", "目的"]
+  #   risks: ["Risks", "Risk", "风险"]
+  #   tests-run: ["Tests run", "Tests", "已运行测试", "测试"]
+  #   self-verification: ["Self-verification", "Self verification", "What I verified", "本人验证", "自验"]

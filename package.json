@@ -1,0 +1,35 @@
+{
+  "name": "pr-evidence-check",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action: linked-issue scope, existing CI test evidence, and a review packet. Comment only. No LLM.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist --license licenses.txt",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "demo": "tsx examples/demo.ts",
+    "check-dist": "npm run build && git diff --exit-code -- dist"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "fflate": "^0.8.2",
+    "js-yaml": "^4.1.0",
+    "minimatch": "^10.0.3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.21",
+    "@vercel/ncc": "^0.38.3",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

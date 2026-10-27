@@ -1,0 +1,53 @@
+name: PR Evidence Check
+description: >-
+  Comment with linked-issue scope, existing CI test evidence, and a review
+  packet. No LLM. Does not block merges.
+author: pr-evidence-check contributors
+
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  token:
+    description: >-
+      Token used to read pull requests, linked issues, check runs, and Actions
+      logs, and to create or update one comment. Defaults to the job token.
+    required: false
+    default: ${{ github.token }}
+  config-path:
+    description: >-
+      Repo path of the optional YAML config, read from the pull request base
+      SHA. A missing file means built-in defaults.
+    required: false
+    default: .github/pr-evidence.yml
+  fail-on:
+    description: >-
+      Exit 1 when an enabled check reaches this severity: none (default),
+      warning, or error. none stays green unless the action is misconfigured.
+      This input does not merge, dismiss reviews, or post a required status
+      beyond the job's own conclusion.
+    required: false
+    default: none
+  comment-language:
+    description: >-
+      Comment language, en or zh. Empty uses the config file, which defaults
+      to en. Section matching always accepts English and Chinese headings.
+    required: false
+    default: ''
+
+outputs:
+  scope-status:
+    description: pass, warn, error, or skipped
+  test-evidence-status:
+    description: pass, warn, error, or skipped
+  review-packet-status:
+    description: pass, warn, error, or skipped
+  comment-url:
+    description: URL of the sticky pull request comment
+  head-sha:
+    description: Head SHA whose existing CI results were read
+
+runs:
+  using: node24
+  main: dist/index.js

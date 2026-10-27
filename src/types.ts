@@ -1,0 +1,316 @@
+export type Language = 'en' | 'zh'
+export type FailOn = 'none' | 'warning' | 'error'
+export type CheckStatus = 'pass' | 'warn' | 'error' | 'skipped'
+export type Severity = 'warn' | 'error'
+
+export type SensitiveReason =
+  | 'lockfile'
+  | 'github_workflow'
+  | 'github_settings'
+  | 'env_file'
+  | 'credential'
+  | 'container'
+  | 'manifest'
+  | 'ci_config'
+  | 'tooling_config'
+  | 'custom'
+
+export interface SensitiveRule {
+  id: string
+  reason: SensitiveReason
+  patterns: string[]
+}
+
+export interface ScopeConfig {
+  largeDiffLines: number
+  largeDiffFiles: number
+  largeFileLines: number
+  outsideScopeErrorRatio: number
+  outsideScopeErrorMin: number
+  ignorePaths: string[]
+  extraSensitivePaths: string[]
+  disabledSensitiveIds: string[]
+  closingKeywords: string[]
+}
+
+export interface TestEvidenceConfig {
+  jobNamePatterns: string[]
+  excludeNamePatterns: string[]
+  parseLogs: boolean
+  maxLogBytes: number
+  maxLogJobs: number
+  requirePassed: boolean
+  noEvidence: Severity
+}
+
+export interface ReviewPacketConfig {
+  headings: {
+    intent: string[]
+    risks: string[]
+    testsRun: string[]
+    selfVerification: string[]
+  }
+  minBodyChars: number
+  incomplete: Severity
+}
+
+export interface Config {
+  language: Language
+  checks: {
+    scope: boolean
+    testEvidence: boolean
+    reviewPacket: boolean
+  }
+  scope: ScopeConfig
+  testEvidence: TestEvidenceConfig
+  reviewPacket: ReviewPacketConfig
+}
+
+export interface ChangedFile {
+  filename: string
+  previousFilename?: string
+  status: string
+  additions: number
+  deletions: number
+  patch?: string
+}
+
+export interface LinkedIssue {
+  repo: string
+  number: number
+  title: string
+  body: string
+  url: string
+  source: 'api' | 'closing_keyword' | 'both'
+  unreadable?: string
+}
+
+export interface KeywordRef {
+  repo: string
+  number: number
+  raw: string
+}
+
+export type FileVerdict = 'in_scope' | 'outside_scope' | 'not_compared' | 'ignored'
+
+export interface SensitiveHit {
+  ruleId: string
+  reason: SensitiveReason
+  pattern: string
+  mentioned: boolean
+  mention?: string
+}
+
+export type FileExplanation =
+  | {
+      code: 'scope.in_scope.path_mention'
+      issueNumber: number
+      repo: string
+      quoted: string
+      viaPrevious?: string
+    }
+  | {
+      code: 'scope.in_scope.path_tokens'
+      issueNumber: number
+      repo: string
+      tokens: string[]
+      snippet: string
+      viaPrevious?: string
+    }
+  | {
+      code: 'scope.in_scope.diff_keywords'
+      issueNumber: number
+      repo: string
+      tokens: string[]
+    }
+  | {
+      code: 'scope.outside'
+      issueRefs: string[]
+      fileTokens: string[]
+      issueKeywords: string[]
+    }
+  | { code: 'scope.no_linked_issue' }
+  | { code: 'scope.ignored'; pattern: string }
+  | {
+      code: 'scope.sensitive'
+      reason: SensitiveReason
+      pattern: string
+      ruleId: string
+      mentioned: boolean
+      mention?: string
+    }
+  | { code: 'scope.renamed_from'; previous: string }
+
+export interface ScopeFileReport {
+  filename: string
+  previousFilename?: string
+  changeStatus: string
+  additions: number
+  deletions: number
+  verdict: FileVerdict
+  sensitive: SensitiveHit[]
+  explanations: FileExplanation[]
+}
+
+export type ScopeSignal =
+  | { id: 'scope.no_files'; level: 'info' }
+  | { id: 'scope.no_linked_issue'; level: 'warn' }
+  | { id: 'scope.issue_unreadable'; level: 'warn'; issues: string[] }
+  | {
+      id: 'scope.large_diff'
+      level: 'warn'
+      additions: number
+      deletions: number
+      files: number
+      lineThreshold: number
+      fileThreshold: number
+      overLines: boolean
+      overFiles: boolean
+    }
+  | {
+      id: 'scope.large_unrelated_file'
+      level: 'warn'
+      filename: string
+      lines: number
+      threshold: number
+    }
+  | {
+      id: 'scope.outside_cluster'
+      level: 'warn'
+      directory: string
+      files: string[]
+      issueKeywords: string[]
+      issueRefs: string[]
+    }
+  | {
+      id: 'scope.outside_ratio'
+      level: 'error'
+      outside: number
+      judged: number
+      ratio: number
+      minFiles: number
+      threshold: number
+    }
+  | {
+      id: 'scope.sensitive'
+      level: 'warn'
+      files: { filename: string; reason: SensitiveReason; pattern: string }[]
+    }
+  | { id: 'scope.api_error'; level: 'warn'; message: string }
+  | { id: 'scope.sha_note'; level: 'info'; message: string }
+
+export interface ScopeReport {
+  enabled: boolean
+  status: CheckStatus
+  issues: LinkedIssue[]
+  files: ScopeFileReport[]
+  signals: ScopeSignal[]
+  additions: number
+  deletions: number
+  fileCount: number
+}
+
+export interface WorkflowJobInfo {
+  id: number
+  name: string
+  workflowName: string
+  status: string
+  conclusion: string | null
+  htmlUrl?: string
+  runId: number
+}
+
+export interface CheckRunInfo {
+  name: string
+  status: string
+  conclusion: string | null
+  htmlUrl?: string
+  summary?: string
+}
+
+export interface ParsedCounts {
+  framework: 'jest' | 'vitest' | 'pytest' | 'go' | 'cargo' | 'junit'
+  passed: number
+  failed: number
+  skipped: number
+  total: number
+  detail: string
+}
+
+export type EvidenceNote =
+  | 'in_progress'
+  | 'logs_unreadable'
+  | 'no_summary'
+  | 'zero_tests'
+  | 'not_downloaded'
+
+export interface EvidenceItem {
+  source: 'workflow_job' | 'check_run'
+  name: string
+  workflowName?: string
+  status: string
+  conclusion: string | null
+  url?: string
+  text: string | null
+  logError?: string
+}
+
+export interface EvidenceJobReport {
+  source: 'workflow_job' | 'check_run'
+  name: string
+  workflowName?: string
+  status: string
+  conclusion: string | null
+  url?: string
+  counts: ParsedCounts | null
+  note?: EvidenceNote
+  logError?: string
+}
+
+export type EvidenceSignal =
+  | { id: 'test_evidence.none'; level: Severity }
+  | { id: 'test_evidence.in_progress'; level: 'warn'; count: number }
+  | { id: 'test_evidence.failed'; level: Severity; jobs: string[] }
+  | { id: 'test_evidence.skipped_only'; level: 'warn' }
+  | { id: 'test_evidence.passed'; level: 'info'; jobs: number }
+  | { id: 'test_evidence.logs_unreadable'; level: 'info'; jobs: string[] }
+  | { id: 'test_evidence.no_summary'; level: 'info'; jobs: string[] }
+  | { id: 'test_evidence.zero_tests'; level: 'warn'; jobs: string[] }
+  | { id: 'test_evidence.api_error'; level: 'warn'; message: string }
+  | { id: 'test_evidence.sha_mismatch'; level: 'warn'; eventSha: string; apiSha: string }
+  | { id: 'test_evidence.not_rerun'; level: 'info' }
+
+export interface EvidenceReport {
+  enabled: boolean
+  status: CheckStatus
+  sha: string
+  jobs: EvidenceJobReport[]
+  signals: EvidenceSignal[]
+  consideredJobs: number
+  consideredChecks: number
+}
+
+export type PacketSectionId = 'intent' | 'risks' | 'testsRun' | 'selfVerification'
+
+export interface PacketSection {
+  id: PacketSectionId
+  status: 'present' | 'missing' | 'empty' | 'placeholder'
+  heading?: string
+  chars: number
+}
+
+export interface PacketReport {
+  enabled: boolean
+  status: CheckStatus
+  sections: PacketSection[]
+}
+
+export interface Report {
+  language: Language
+  failOn: FailOn
+  headSha: string
+  generatedAt: string
+  scope: ScopeReport
+  evidence: EvidenceReport
+  packet: PacketReport
+}

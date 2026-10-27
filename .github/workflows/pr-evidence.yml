@@ -1,0 +1,31 @@
+name: PR evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  checks: read
+  actions: read
+
+concurrency:
+  group: pr-evidence-${{ github.event.pull_request.number || github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.pull_requests[0].number }}
+    runs-on: ubuntu-latest
+    steps:
+      # On pull_request this is the merge commit, so the PR's action code is what runs.
+      # On workflow_run, github.sha is the default branch. Do not checkout the PR head here.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./

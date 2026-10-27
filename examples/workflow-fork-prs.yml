@@ -1,0 +1,22 @@
+# pull_request from a fork cannot write comments. pull_request_target can.
+# This action only calls the GitHub API. It does not check out the pull request
+# or run its code. Do not add a checkout of the head SHA, and do not install
+# or build the pull request in this job.
+name: PR evidence
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  checks: read
+  actions: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: your-org/pr-evidence-check@v0.1.0

@@ -1,0 +1,21 @@
+# Zero-config. Scope and the review packet are available as soon as the pull
+# request is opened. Test evidence is whatever CI has already finished for
+# this head SHA. If tests are still running, the comment says so.
+name: PR evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  checks: read
+  actions: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: your-org/pr-evidence-check@v0.1.0
