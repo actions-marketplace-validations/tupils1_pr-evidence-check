@@ -201,6 +201,9 @@ async function collectEvidence(
         status: job.status,
         conclusion: job.conclusion,
         ...(job.htmlUrl ? { url: job.htmlUrl } : {}),
+        ...(job.event ? { event: job.event } : {}),
+        ...(job.completedAt ? { completedAt: job.completedAt } : {}),
+        runId: job.runId,
         text,
         ...(logError ? { logError } : {}),
       })

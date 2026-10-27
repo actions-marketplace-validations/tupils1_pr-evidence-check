@@ -59,7 +59,7 @@ export function buildEvidence(input: {
   consideredJobs: number
   consideredChecks: number
 }): EvidenceReport {
-  const jobs = input.items.map((item) => toJobReport(item, input.config.parseLogs))
+  const jobs = collapseEventDuplicates(input.items.map((item) => toJobReport(item, input.config.parseLogs)))
   const signals = evidenceSignals(jobs, input)
   return {
     enabled: true,
@@ -98,6 +98,9 @@ function toJobReport(item: EvidenceItem, parseLogs: boolean): EvidenceJobReport 
     status: item.status,
     conclusion: item.conclusion,
     ...(item.url ? { url: item.url } : {}),
+    ...(item.event ? { event: item.event } : {}),
+    ...(item.completedAt ? { completedAt: item.completedAt } : {}),
+    ...(item.runId != null ? { runId: item.runId } : {}),
   }
   if (item.status !== 'completed') {
     return { ...base, counts: null, note: 'in_progress' }
@@ -157,8 +160,60 @@ function evidenceSignals(
   return signals
 }
 
+const FAILED = new Set(['failure', 'timed_out', 'cancelled', 'startup_failure'])
+
+function collapseEventDuplicates(jobs: readonly EvidenceJobReport[]): EvidenceJobReport[] {
+  const buckets = new Map<string, EvidenceJobReport[]>()
+  const rest: EvidenceJobReport[] = []
+  for (const job of jobs) {
+    if (job.event !== 'push' && job.event !== 'pull_request') {
+      rest.push(job)
+      continue
+    }
+    const key = `${job.workflowName ?? ''}\0${job.name}`.toLowerCase()
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(job)
+    else buckets.set(key, [job])
+  }
+  const chosen: EvidenceJobReport[] = []
+  for (const bucket of buckets.values()) {
+    const events = new Set(bucket.map((job) => job.event))
+    if (bucket.length > 1 && events.has('push') && events.has('pull_request')) chosen.push(representDuplicate(bucket))
+    else chosen.push(...bucket)
+  }
+  return [...rest, ...chosen]
+}
+
+function representDuplicate(jobs: readonly EvidenceJobReport[]): EvidenceJobReport {
+  const preferred = [...jobs].sort(byPreferredRun)[0]
+  if (!preferred) return jobs[0] as EvidenceJobReport
+  const failing = jobs.find((job) => isFailedRun(job))
+  if (!failing || isFailedRun(preferred)) return preferred
+  return { ...preferred, conclusion: FAILED.has(failing.conclusion ?? '') ? failing.conclusion : 'failure' }
+}
+
+function byPreferredRun(a: EvidenceJobReport, b: EvidenceJobReport): number {
+  const completed = Number(b.status === 'completed') - Number(a.status === 'completed')
+  if (completed !== 0) return completed
+  const time = completedMillis(b) - completedMillis(a)
+  if (time !== 0) return time
+  const pullRequest = Number(b.event === 'pull_request') - Number(a.event === 'pull_request')
+  if (pullRequest !== 0) return pullRequest
+  return (b.runId ?? 0) - (a.runId ?? 0)
+}
+
+function completedMillis(job: EvidenceJobReport): number {
+  if (job.status !== 'completed' || !job.completedAt) return 0
+  const parsed = Date.parse(job.completedAt)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isFailedRun(job: EvidenceJobReport): boolean {
+  return FAILED.has(job.conclusion ?? '') || (job.counts?.failed ?? 0) > 0
+}
+
 function isFailedConclusion(conclusion: string | null): boolean {
-  return conclusion === 'failure' || conclusion === 'timed_out' || conclusion === 'cancelled' || conclusion === 'startup_failure'
+  return FAILED.has(conclusion ?? '')
 }
 
 function displayName(job: EvidenceJobReport): string {

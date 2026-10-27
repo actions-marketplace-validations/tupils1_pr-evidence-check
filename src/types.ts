@@ -229,6 +229,10 @@ export interface WorkflowJobInfo {
   conclusion: string | null
   htmlUrl?: string
   runId: number
+  /** Workflow run event, such as `push` or `pull_request`. */
+  event?: string
+  /** Job completion time. Used when the same job ran on more than one event. */
+  completedAt?: string
 }
 
 export interface CheckRunInfo {
@@ -264,6 +268,9 @@ export interface EvidenceItem {
   url?: string
   text: string | null
   logError?: string
+  event?: string
+  completedAt?: string
+  runId?: number
 }
 
 export interface EvidenceJobReport {
@@ -276,6 +283,9 @@ export interface EvidenceJobReport {
   counts: ParsedCounts | null
   note?: EvidenceNote
   logError?: string
+  event?: string
+  completedAt?: string
+  runId?: number
 }
 
 export type EvidenceSignal =
