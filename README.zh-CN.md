@@ -66,10 +66,10 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: tupils1/pr-evidence-check@main
+      - uses: tupils1/pr-evidence-check@v1
 ```
 
-示例使用 `tupils1/pr-evidence-check@main`。这个仓库不发布 release tag。不需要配置文件，也不需要 checkout。范围和审查材料包马上就有。测试证据是这个 head SHA 上已经结束的 CI。测试还在跑，评论会写明。
+示例使用 `tupils1/pr-evidence-check@v1`。`v1` 标签指向最新的 v1 版本。不需要配置文件，也不需要 checkout。范围和审查材料包马上就有。测试证据是这个 head SHA 上已经结束的 CI。测试还在跑，评论会写明。
 
 测试和这个 action 在同一个 workflow 里时，放在测试后面，测试失败也要评论。测试 job 只需要 `contents: read`。job 上的 `permissions` 会替换 workflow 级权限，所以 evidence job 要重复整段：
 
@@ -95,7 +95,7 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: tupils1/pr-evidence-check@main
+      - uses: tupils1/pr-evidence-check@v1
 ```
 
 更多例子在 [`examples/`](examples/)。

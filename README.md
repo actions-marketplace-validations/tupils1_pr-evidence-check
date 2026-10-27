@@ -66,10 +66,10 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: tupils1/pr-evidence-check@main
+      - uses: tupils1/pr-evidence-check@v1
 ```
 
-Examples use `tupils1/pr-evidence-check@main`. This repository does not publish release tags. No config file. No checkout. Scope and the review packet are ready immediately. Test evidence is whatever CI has already finished for the head SHA. If tests are still running, the comment says that.
+Examples use `tupils1/pr-evidence-check@v1`. The `v1` tag tracks the latest v1 release. No config file. No checkout. Scope and the review packet are ready immediately. Test evidence is whatever CI has already finished for the head SHA. If tests are still running, the comment says that.
 
 To read logs from tests in the **same** workflow, run this after them and keep the comment even when tests fail. The test job only needs `contents: read`. A job-level `permissions` key replaces the workflow permissions, so the evidence job repeats the full block:
 
@@ -95,7 +95,7 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: tupils1/pr-evidence-check@main
+      - uses: tupils1/pr-evidence-check@v1
 ```
 
 More copies live in [`examples/`](examples/).

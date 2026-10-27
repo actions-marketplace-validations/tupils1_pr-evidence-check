@@ -28,4 +28,4 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: tupils1/pr-evidence-check@main
+      - uses: tupils1/pr-evidence-check@v1
