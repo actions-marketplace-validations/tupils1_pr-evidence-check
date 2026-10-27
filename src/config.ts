@@ -75,6 +75,9 @@ export function defaultConfig(): Config {
       extraSensitivePaths: [],
       disabledSensitiveIds: [],
       closingKeywords: [...DEFAULT_KEYWORDS],
+      noLinkedIssue: 'warn',
+      skipLabels: [],
+      docsPaths: [],
     },
     testEvidence: {
       jobNamePatterns: [...DEFAULT_JOB_PATTERNS],
@@ -83,7 +86,7 @@ export function defaultConfig(): Config {
       maxLogBytes: 1_500_000,
       maxLogJobs: 20,
       requirePassed: false,
-      noEvidence: 'warn',
+      noEvidence: 'info',
     },
     reviewPacket: {
       headings: defaultHeadings(),
@@ -210,6 +213,12 @@ function applyScope(config: Config, value: unknown, warn: (message: string) => v
     'ignoreSensitiveIds',
     'closing-keywords',
     'closingKeywords',
+    'no-linked-issue',
+    'noLinkedIssue',
+    'skip-labels',
+    'skipLabels',
+    'docs-paths',
+    'docsPaths',
   ]
   warnUnknown(value, known, 'scope', warn)
   const lines = firstDefined(value, 'large-diff-lines', 'largeDiffLines')
@@ -242,6 +251,12 @@ function applyScope(config: Config, value: unknown, warn: (message: string) => v
     }
     config.scope.closingKeywords = list
   }
+  const noLinked = firstDefined(value, 'no-linked-issue', 'noLinkedIssue')
+  if (noLinked !== undefined) config.scope.noLinkedIssue = expectNoLinkedIssue(noLinked)
+  const skipLabels = firstDefined(value, 'skip-labels', 'skipLabels')
+  if (skipLabels !== undefined) config.scope.skipLabels = expectStringArray('scope.skip-labels', skipLabels)
+  const docsPaths = firstDefined(value, 'docs-paths', 'docsPaths')
+  if (docsPaths !== undefined) config.scope.docsPaths = expectStringArray('scope.docs-paths', docsPaths)
 }
 
 function applyEvidence(config: Config, value: unknown, warn: (message: string) => void): void {
@@ -286,7 +301,7 @@ function applyEvidence(config: Config, value: unknown, warn: (message: string) =
     config.testEvidence.requirePassed = expectBoolean(requirePassed, 'test-evidence.require-passed')
   }
   const noEvidence = firstDefined(value, 'no-evidence', 'noEvidence')
-  if (noEvidence !== undefined) config.testEvidence.noEvidence = expectSeverity(noEvidence, 'test-evidence.no-evidence')
+  if (noEvidence !== undefined) config.testEvidence.noEvidence = expectNotice(noEvidence, 'test-evidence.no-evidence')
 }
 
 function applyPacket(config: Config, value: unknown, warn: (message: string) => void): void {
@@ -332,6 +347,20 @@ function expectSeverity(value: unknown, label: string): 'warn' | 'error' {
   if (value === 'warn' || value === 'warning') return 'warn'
   if (value === 'error') return 'error'
   throw new ActionFailure('misconfigured', `${label} must be warn or error.`)
+}
+
+function expectNotice(value: unknown, label: string): 'info' | 'warn' | 'error' {
+  if (value === 'info') return 'info'
+  if (value === 'warn' || value === 'warning') return 'warn'
+  if (value === 'error') return 'error'
+  throw new ActionFailure('misconfigured', `${label} must be info, warn, or error.`)
+}
+
+function expectNoLinkedIssue(value: unknown): 'warn' | 'info' | 'skip' {
+  if (value === 'warn' || value === 'warning') return 'warn'
+  if (value === 'info') return 'info'
+  if (value === 'skip' || value === 'off' || value === 'none') return 'skip'
+  throw new ActionFailure('misconfigured', 'scope.no-linked-issue must be warn, info, or skip.')
 }
 
 function expectLanguage(value: unknown, label: string): Language {

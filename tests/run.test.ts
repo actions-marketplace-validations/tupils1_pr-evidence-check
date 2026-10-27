@@ -25,6 +25,9 @@ function pull(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     headSha: SHA,
     baseSha: 'b'.repeat(40),
     baseRef: 'main',
+    authorLogin: 'octocat',
+    authorType: 'User',
+    labels: [],
     ...overrides,
   }
 }
@@ -194,6 +197,44 @@ describe('run', () => {
       createClient: () => fake.client(),
       now: () => new Date('2026-10-27T00:00:00.000Z'),
     })).rejects.toMatchObject({ kind: 'threshold', message: expect.stringContaining('scope=error') })
+  })
+
+  it('keeps fail-on warning green when the only gap is missing test evidence', async () => {
+    const fake = new FakeClient()
+    fake.jobs = []
+    fake.checks = []
+    const actions = io()
+    await expect(run({
+      io: actions,
+      input: input({ failOn: 'warning' }),
+      createClient: () => fake.client(),
+      now: () => new Date('2026-10-27T00:00:00.000Z'),
+    })).resolves.toMatchObject({ commentUrl: 'https://example.test/comment/10' })
+    expect(actions.outputs['test-evidence-status']).toBe('pass')
+    expect(fake.comments[0]?.body).toContain('test_evidence.none')
+  })
+
+  it('does not warn a bot author who opened a pull request without an issue', async () => {
+    const fake = new FakeClient()
+    fake.issues = []
+    fake.files = [{ filename: 'src/app.ts', status: 'modified', additions: 2, deletions: 0 }]
+    fake.pullOverrides = {
+      title: 'Bump lodash',
+      body: 'Automated dependency update.',
+      authorLogin: 'dependabot[bot]',
+      authorType: 'Bot',
+      labels: ['dependencies'],
+    }
+    const actions = io()
+    await run({
+      io: actions,
+      input: input(),
+      createClient: () => fake.client(),
+      now: () => new Date('2026-10-27T00:00:00.000Z'),
+    })
+    expect(actions.outputs['scope-status']).toBe('pass')
+    expect(fake.comments[0]?.body).toContain('author is a bot')
+    expect(fake.comments[0]?.body).toContain('dependabot[bot]')
   })
 
   it('reads config from the base ref and ignores a pull request that would disable checks', async () => {

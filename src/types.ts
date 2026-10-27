@@ -2,6 +2,9 @@ export type Language = 'en' | 'zh'
 export type FailOn = 'none' | 'warning' | 'error'
 export type CheckStatus = 'pass' | 'warn' | 'error' | 'skipped'
 export type Severity = 'warn' | 'error'
+export type NoticeLevel = 'info' | 'warn' | 'error'
+export type NoLinkedIssueMode = 'warn' | 'info' | 'skip'
+export type QuietNoIssue = 'bot' | 'docs' | 'ignored' | 'docs_or_ignored' | 'label' | 'config'
 
 export type SensitiveReason =
   | 'lockfile'
@@ -31,6 +34,9 @@ export interface ScopeConfig {
   extraSensitivePaths: string[]
   disabledSensitiveIds: string[]
   closingKeywords: string[]
+  noLinkedIssue: NoLinkedIssueMode
+  skipLabels: string[]
+  docsPaths: string[]
 }
 
 export interface TestEvidenceConfig {
@@ -40,7 +46,7 @@ export interface TestEvidenceConfig {
   maxLogBytes: number
   maxLogJobs: number
   requirePassed: boolean
-  noEvidence: Severity
+  noEvidence: NoticeLevel
 }
 
 export interface ReviewPacketConfig {
@@ -154,7 +160,12 @@ export interface ScopeFileReport {
 
 export type ScopeSignal =
   | { id: 'scope.no_files'; level: 'info' }
-  | { id: 'scope.no_linked_issue'; level: 'warn' }
+  | {
+      id: 'scope.no_linked_issue'
+      level: 'info' | 'warn'
+      quiet?: QuietNoIssue
+      quietDetail?: string
+    }
   | { id: 'scope.issue_unreadable'; level: 'warn'; issues: string[] }
   | {
       id: 'scope.large_diff'
@@ -268,7 +279,7 @@ export interface EvidenceJobReport {
 }
 
 export type EvidenceSignal =
-  | { id: 'test_evidence.none'; level: Severity }
+  | { id: 'test_evidence.none'; level: NoticeLevel }
   | { id: 'test_evidence.in_progress'; level: 'warn'; count: number }
   | { id: 'test_evidence.failed'; level: Severity; jobs: string[] }
   | { id: 'test_evidence.skipped_only'; level: 'warn' }

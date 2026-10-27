@@ -99,7 +99,14 @@ describe('github client', () => {
           }
           return {
             status: 200,
-            data: { title: 'T', body: 'B', head: { sha: 'h'.repeat(40) }, base: { sha: 'b'.repeat(40), ref: 'main' } },
+            data: {
+              title: 'T',
+              body: 'B',
+              user: { login: 'dependabot[bot]', type: 'Bot' },
+              labels: [{ name: 'dependencies' }, { name: '' }, { foo: 1 }, 'docs'],
+              head: { sha: 'h'.repeat(40) },
+              base: { sha: 'b'.repeat(40), ref: 'main' },
+            },
           }
         }
         if (route.includes('/contents/')) {
@@ -136,6 +143,9 @@ describe('github client', () => {
 
     const pr = await client.getPullRequest(7)
     expect(pr.baseSha).toBe('b'.repeat(40))
+    expect(pr.authorLogin).toBe('dependabot[bot]')
+    expect(pr.authorType).toBe('Bot')
+    expect(pr.labels).toEqual(['dependencies', 'docs'])
     expect((await client.getRepoFile('.github/pr-evidence.yml', pr.baseSha)).text).toContain('language: zh')
     const files = await client.listFiles(7)
     expect(files).toHaveLength(101)

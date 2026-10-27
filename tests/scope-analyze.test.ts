@@ -396,4 +396,151 @@ describe('scope vs linked issue', () => {
     const match = fileReport('src/auth/session.ts', report.files).explanations[0]
     expect(match && 'repo' in match && match.repo).toBe('acme/other')
   })
+
+  it('records a missing issue as info for bots, docs, ignore-paths, and skip labels', () => {
+    const code = [changed({ filename: 'src/app.ts' })]
+    const bot = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'dependabot[bot]',
+      authorType: 'Bot',
+      files: code,
+    })
+    expect(bot.status).toBe('pass')
+    expect(bot.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({
+      level: 'info',
+      quiet: 'bot',
+      quietDetail: 'dependabot[bot]',
+    })
+
+    const renovate = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'renovate',
+      authorType: 'User',
+      files: code,
+    })
+    expect(renovate.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ level: 'info', quiet: 'bot' })
+
+    const bracketBot = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'github-actions[bot]',
+      authorType: 'User',
+      files: code,
+    })
+    expect(bracketBot.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({
+      quiet: 'bot',
+      quietDetail: 'github-actions[bot]',
+    })
+
+    const extraDocs = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ docsPaths: ['notes/**'] }),
+      issues: [],
+      files: [changed({ filename: 'notes/a.txt' })],
+    })
+    expect(extraDocs.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ quiet: 'docs' })
+
+    const human = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'octocat',
+      authorType: 'User',
+      files: code,
+    })
+    expect(human.status).toBe('warn')
+    expect(human.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ level: 'warn' })
+
+    const docs = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'octocat',
+      files: [changed({ filename: 'README.md' }), changed({ filename: 'docs/guide.mdx' })],
+    })
+    expect(docs.status).toBe('pass')
+    expect(docs.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ quiet: 'docs' })
+
+    const mixed = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      files: [changed({ filename: 'README.md' }), changed({ filename: 'src/app.ts' })],
+    })
+    expect(mixed.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ level: 'warn' })
+
+    const ignored = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ ignorePaths: ['generated/**'] }),
+      issues: [],
+      files: [changed({ filename: 'generated/types.ts' })],
+    })
+    expect(ignored.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ quiet: 'ignored' })
+
+    const both = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ ignorePaths: ['generated/**'] }),
+      issues: [],
+      files: [
+        changed({ filename: 'README.md' }),
+        changed({ filename: 'generated/types.ts' }),
+      ],
+    })
+    expect(both.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ quiet: 'docs_or_ignored' })
+
+    const renamed = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      files: [changed({ filename: 'docs/moved.md', previousFilename: 'src/app.ts', status: 'renamed' })],
+    })
+    expect(renamed.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ level: 'warn' })
+
+    const labeled = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ skipLabels: ['Dependencies'] }),
+      issues: [],
+      labels: ['dependencies'],
+      files: code,
+    })
+    expect(labeled.status).toBe('pass')
+    expect(labeled.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({
+      quiet: 'label',
+      quietDetail: 'dependencies',
+    })
+
+    const skipped = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ noLinkedIssue: 'skip' }),
+      issues: [],
+      files: code,
+    })
+    expect(skipped.signals.some((signal) => signal.id === 'scope.no_linked_issue')).toBe(false)
+    expect(skipped.status).toBe('pass')
+
+    const forced = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope({ noLinkedIssue: 'info' }),
+      issues: [],
+      authorLogin: 'octocat',
+      files: code,
+    })
+    expect(forced.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ quiet: 'config', level: 'info' })
+
+    const botLockfile = analyzeScope({
+      prRepo: 'acme/app',
+      config: scope(),
+      issues: [],
+      authorLogin: 'dependabot',
+      files: [changed({ filename: 'package-lock.json' })],
+    })
+    expect(botLockfile.signals.find((signal) => signal.id === 'scope.no_linked_issue')).toMatchObject({ level: 'info' })
+    expect(botLockfile.signals.some((signal) => signal.id === 'scope.sensitive')).toBe(true)
+    expect(botLockfile.status).toBe('warn')
+  })
 })

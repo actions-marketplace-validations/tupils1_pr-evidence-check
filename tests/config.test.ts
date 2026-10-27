@@ -8,7 +8,11 @@ import { compilePattern, defaultConfig, loadConfig, loadConfigFile, parseFailOn,
 describe('config', () => {
   it('uses defaults when the file is missing or empty', () => {
     const warnings: string[] = []
-    expect(loadConfig(null, '.github/pr-evidence.yml', (message) => warnings.push(message)).checks.scope).toBe(true)
+    const defaults = loadConfig(null, '.github/pr-evidence.yml', (message) => warnings.push(message))
+    expect(defaults.checks.scope).toBe(true)
+    expect(defaults.testEvidence.noEvidence).toBe('info')
+    expect(defaults.scope.noLinkedIssue).toBe('warn')
+    expect(defaults.scope.skipLabels).toEqual([])
     expect(loadConfig('# just a comment\n', 'x', (message) => warnings.push(message)).language).toBe('en')
     const dir = mkdtempSync(path.join(tmpdir(), 'pr-evidence-'))
     expect(loadConfigFile(path.join(dir, 'missing.yml')).testEvidence.parseLogs).toBe(true)
@@ -64,6 +68,30 @@ describe('config', () => {
     expect(parseLanguage('')).toBeUndefined()
     expect(parseLanguage('zh-CN')).toBe('zh')
     expect(() => parseLanguage('fr')).toThrow(ActionFailure)
+    expect(() => loadConfig('test-evidence:\n  no-evidence: loud\n', 'cfg')).toThrow(/info, warn, or error/)
+    expect(() => loadConfig('scope:\n  no-linked-issue: maybe\n', 'cfg')).toThrow(/no-linked-issue/)
+  })
+
+  it('parses quiet-scope and info-level test evidence settings', () => {
+    const config = loadConfig(
+      [
+        'scope:',
+        '  no-linked-issue: skip',
+        '  skip-labels:',
+        '    - dependencies',
+        '  docs-paths:',
+        '    - notes/**',
+        'test-evidence:',
+        '  no-evidence: warning',
+      ].join('\n'),
+      'cfg',
+    )
+    expect(config.scope.noLinkedIssue).toBe('skip')
+    expect(config.scope.skipLabels).toEqual(['dependencies'])
+    expect(config.scope.docsPaths).toEqual(['notes/**'])
+    expect(config.testEvidence.noEvidence).toBe('warn')
+    expect(loadConfig('scope:\n  no-linked-issue: off\n', 'cfg').scope.noLinkedIssue).toBe('skip')
+    expect(loadConfig('test-evidence:\n  no-evidence: info\n', 'cfg').testEvidence.noEvidence).toBe('info')
   })
 
   it('reports an unreadable config file as misconfiguration', () => {

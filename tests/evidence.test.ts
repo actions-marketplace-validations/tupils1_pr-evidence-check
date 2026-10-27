@@ -94,6 +94,24 @@ describe('test log parsers', () => {
     const text = `${head}Tests:       3 passed, 3 total`
     expect(parseTestOutput(text.slice(-80))?.passed).toBe(3)
   })
+
+  it('parses summaries inside timestamped Actions groups', () => {
+    const vitest = [
+      '2026-10-27T14:19:58.0000000Z ##[group]Run npm test',
+      '2026-10-27T14:19:58.1000000Z \u001b[2m      Tests \u001b[22m 1 passed (1)\r\u001b[2m      Tests \u001b[22m 68 passed (68)',
+      '2026-10-27T14:19:58.2000000Z ##[endgroup]',
+    ].join('\n')
+    expect(parseTestOutput(vitest)).toMatchObject({ framework: 'vitest', passed: 68, total: 68 })
+
+    const jest = '2026-10-27T14:19:58.0000000Z ##[group]jest\n2026-10-27T14:19:59.0000000Z Tests:       4 passed, 4 total\n2026-10-27T14:19:59.1000000Z ::endgroup::'
+    expect(parseTestOutput(jest)).toMatchObject({ framework: 'jest', passed: 4, total: 4 })
+
+    const go = [
+      '2026-10-27T14:19:58.0000000Z --- PASS: TestAdd (0.00s)',
+      '2026-10-27T14:19:58.1000000Z --- FAIL: TestSub (0.00s)',
+    ].join('\n')
+    expect(parseTestOutput(go)).toMatchObject({ framework: 'go', passed: 1, failed: 1, total: 2 })
+  })
 })
 
 describe('selecting existing CI', () => {
@@ -164,8 +182,17 @@ describe('evidence status', () => {
 
   it('flags no test evidence, in-progress jobs, failures, skips, empty summaries, and API errors', () => {
     const none = buildEvidence({ sha: 'abc', config: evidenceConfig(), items: [], consideredJobs: 3, consideredChecks: 1 })
-    expect(none.status).toBe('warn')
-    expect(none.signals.some((signal) => signal.id === 'test_evidence.none')).toBe(true)
+    expect(none.status).toBe('pass')
+    expect(none.signals.find((signal) => signal.id === 'test_evidence.none')).toMatchObject({ level: 'info' })
+
+    const warned = buildEvidence({
+      sha: 'abc',
+      config: evidenceConfig({ noEvidence: 'warn' }),
+      items: [],
+      consideredJobs: 1,
+      consideredChecks: 0,
+    })
+    expect(warned.status).toBe('warn')
 
     const strict = buildEvidence({
       sha: 'abc',

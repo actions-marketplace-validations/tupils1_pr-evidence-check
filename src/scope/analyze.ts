@@ -4,13 +4,15 @@ import type {
   FileExplanation,
   FileVerdict,
   LinkedIssue,
+  QuietNoIssue,
   ScopeConfig,
   ScopeFileReport,
   ScopeReport,
   ScopeSignal,
 } from '../types'
+import { isBotAuthor, matchingSkipLabel } from './author'
 import { issueText } from './links'
-import { activeSensitiveRules, matchIgnore, matchSensitive } from './sensitive'
+import { activeSensitiveRules, matchDocs, matchIgnore, matchSensitive } from './sensitive'
 import {
   allowsDiffKeywords,
   diffTokens,
@@ -37,6 +39,9 @@ export function analyzeScope(input: {
   config: ScopeConfig
   apiError?: string
   filesUnavailable?: boolean
+  authorLogin?: string
+  authorType?: string
+  labels?: readonly string[]
 }): ScopeReport {
   const rules = activeSensitiveRules(input.config.disabledSensitiveIds, input.config.extraSensitivePaths)
   const issueTexts = input.issues.map((issue) => issueText(issue))
@@ -224,7 +229,16 @@ function uniqueTokens(file: ChangedFile): string[] {
 
 function collectSignals(
   files: readonly ScopeFileReport[],
-  input: { prRepo: string; issues: LinkedIssue[]; config: ScopeConfig; apiError?: string; filesUnavailable?: boolean },
+  input: {
+    prRepo: string
+    issues: LinkedIssue[]
+    config: ScopeConfig
+    apiError?: string
+    filesUnavailable?: boolean
+    authorLogin?: string
+    authorType?: string
+    labels?: readonly string[]
+  },
   keywords: string[],
   refs: string[],
   additions: number,
@@ -237,7 +251,10 @@ function collectSignals(
     signals.push({ id: 'scope.no_files', level: 'info' })
     return signals
   }
-  if (input.issues.length === 0) signals.push({ id: 'scope.no_linked_issue', level: 'warn' })
+  if (input.issues.length === 0) {
+    const missing = noLinkedIssueSignal(input, files)
+    if (missing) signals.push(missing)
+  }
   const unreadable = input.issues.filter((issue) => issue.unreadable)
   if (input.issues.length > 0 && unreadable.length === input.issues.length) {
     signals.push({
@@ -322,4 +339,59 @@ function collectSignals(
     signals.push({ id: 'scope.sensitive', level: 'warn', files: surprise })
   }
   return signals
+}
+
+function noLinkedIssueSignal(
+  input: {
+    config: ScopeConfig
+    authorLogin?: string
+    authorType?: string
+    labels?: readonly string[]
+  },
+  files: readonly ScopeFileReport[],
+): ScopeSignal | undefined {
+  if (input.config.noLinkedIssue === 'skip') return undefined
+  if (input.config.noLinkedIssue === 'info') {
+    return { id: 'scope.no_linked_issue', level: 'info', quiet: 'config' }
+  }
+  const label = matchingSkipLabel(input.labels ?? [], input.config.skipLabels)
+  if (label) return { id: 'scope.no_linked_issue', level: 'info', quiet: 'label', quietDetail: label }
+  if (isBotAuthor(input.authorLogin, input.authorType)) {
+    const detail = (input.authorLogin ?? '').trim() || (input.authorType ?? '').trim()
+    return {
+      id: 'scope.no_linked_issue',
+      level: 'info',
+      quiet: 'bot',
+      ...(detail ? { quietDetail: detail } : {}),
+    }
+  }
+  const filesReason = quietFilesReason(files, input.config)
+  if (filesReason) return { id: 'scope.no_linked_issue', level: 'info', quiet: filesReason }
+  return { id: 'scope.no_linked_issue', level: 'warn' }
+}
+
+function quietFilesReason(
+  files: readonly ScopeFileReport[],
+  config: ScopeConfig,
+): Extract<QuietNoIssue, 'docs' | 'ignored' | 'docs_or_ignored'> | undefined {
+  if (files.length === 0) return undefined
+  let sawDocs = false
+  let sawIgnoredOnly = false
+  for (const file of files) {
+    const names = [file.filename, file.previousFilename].filter((name): name is string => Boolean(name))
+    let fileDocs = false
+    let fileIgnored = false
+    for (const name of names) {
+      const docs = matchDocs(name, config.docsPaths) != null
+      const ignored = matchIgnore(name, config.ignorePaths) != null
+      if (!docs && !ignored) return undefined
+      if (docs) fileDocs = true
+      if (ignored) fileIgnored = true
+    }
+    if (fileDocs) sawDocs = true
+    else if (fileIgnored) sawIgnoredOnly = true
+  }
+  if (sawDocs && sawIgnoredOnly) return 'docs_or_ignored'
+  if (sawDocs) return 'docs'
+  return 'ignored'
 }

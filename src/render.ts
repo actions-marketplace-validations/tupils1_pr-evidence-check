@@ -267,14 +267,59 @@ function explainSensitive(
     : `\`scope.sensitive\` — Sensitive path (${reason}, pattern \`${cell(item.pattern)}\`). No linked issue mentions this path.`
 }
 
+function quietNoIssueNote(
+  signal: Extract<ScopeSignal, { id: 'scope.no_linked_issue' }>,
+  lang: Language,
+): string {
+  if (signal.level !== 'info' || !signal.quiet) return ''
+  const detail = cell(signal.quietDetail ?? '')
+  if (lang === 'zh') {
+    switch (signal.quiet) {
+      case 'bot':
+        return `因为作者是机器人（\`${detail}\`），所以这条记为 info，不计入警告。`
+      case 'docs':
+        return '因为改动的文件全是文档，所以这条记为 info，不计入警告。'
+      case 'ignored':
+        return '因为改动的文件都命中了 `ignore-paths`，所以这条记为 info，不计入警告。'
+      case 'docs_or_ignored':
+        return '因为改动的文件要么是文档，要么命中了 `ignore-paths`，所以这条记为 info，不计入警告。'
+      case 'label':
+        return `因为 PR 带有跳过标签 \`${detail}\`，所以这条记为 info，不计入警告。`
+      case 'config':
+        return '因为配置 `scope.no-linked-issue` 是 `info`，所以这条记为 info，不计入警告。'
+      default:
+        return ''
+    }
+  }
+  switch (signal.quiet) {
+    case 'bot':
+      return `Recorded as info, not a warning, because the author is a bot (\`${detail}\`).`
+    case 'docs':
+      return 'Recorded as info, not a warning, because every changed file is documentation.'
+    case 'ignored':
+      return 'Recorded as info, not a warning, because every changed file matches `ignore-paths`.'
+    case 'docs_or_ignored':
+      return 'Recorded as info, not a warning, because every changed file is documentation or matches `ignore-paths`.'
+    case 'label':
+      return `Recorded as info, not a warning, because the pull request has the skip label \`${detail}\`.`
+    case 'config':
+      return 'Recorded as info, not a warning, because `scope.no-linked-issue` is `info`.'
+    default:
+      return ''
+  }
+}
+
 function renderScopeSignal(signal: ScopeSignal, lang: Language): string {
   switch (signal.id) {
     case 'scope.no_files':
       return lang === 'zh' ? '`scope.no_files` — 这个 PR 没有改文件。' : '`scope.no_files` — This pull request changes no files.'
-    case 'scope.no_linked_issue':
-      return lang === 'zh'
+    case 'scope.no_linked_issue': {
+      const base = lang === 'zh'
         ? '`scope.no_linked_issue` — 没有关联 issue，范围检查只能标出敏感路径和大 diff。'
         : '`scope.no_linked_issue` — No linked issue. Scope can still flag sensitive paths and a large diff, but not unrelated files.'
+      const note = quietNoIssueNote(signal, lang)
+      return note ? `${base} ${note}` : base
+    }
     case 'scope.issue_unreadable':
       return lang === 'zh'
         ? `\`scope.issue_unreadable\` — 关联的 ${signal.issues.join(', ')} 正文读不到，范围判断可能偏严。`

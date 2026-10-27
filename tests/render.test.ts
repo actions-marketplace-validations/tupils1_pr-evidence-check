@@ -79,6 +79,25 @@ describe('comment rendering', () => {
     expect(sortFiles(reportFor('en').scope.files)[0]?.filename).not.toBe('src/auth/login.ts')
   })
 
+  it('explains an info-level missing issue without turning the check red', () => {
+    const base = reportFor('en')
+    const scope = analyzeScope({
+      prRepo: 'acme/app',
+      config: defaultConfig().scope,
+      issues: [],
+      authorLogin: 'renovate[bot]',
+      authorType: 'Bot',
+      files: [changed('README.md')],
+    })
+    const comment = renderComment({ ...base, scope }, 'acme/app')
+    expect(comment).toContain('scope=pass')
+    expect(comment).toContain('author is a bot')
+    expect(comment).toContain('renovate[bot]')
+    const zh = renderComment({ ...base, language: 'zh', scope }, 'acme/app')
+    expect(zh).toContain('机器人')
+    expect(zh).toContain('renovate[bot]')
+  })
+
   it('renders the same signals in Chinese', () => {
     const comment = renderComment(reportFor('zh'), 'acme/app')
     expect(comment).toContain('范围与关联 issue')

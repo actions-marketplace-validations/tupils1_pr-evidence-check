@@ -20,6 +20,7 @@ scope:
   outside-scope-error-min: 3
   outside-scope-error-ratio: 0.5
   # These paths are not judged for scope. Sensitive-path rules still apply.
+  # A diff that only touches these paths records "no linked issue" as info.
   ignore-paths: []
   # Added on top of the built-in lockfile, CI, secret, manifest, and config list.
   sensitive-paths: []
@@ -28,6 +29,13 @@ scope:
   ignore-sensitive-ids: []
   # Defaults are GitHub's closing keywords: close/closes/closed, fix/fixes/fixed,
   # resolve/resolves/resolved.
+  # warn (default), info, or skip. warn is recorded as info for bot authors
+  # (dependabot, renovate, and logins ending in [bot]), docs-only diffs,
+  # diffs that only match ignore-paths, and skip-labels below.
+  no-linked-issue: warn
+  skip-labels: []
+  # Extra documentation globs, added to the built-in *.md, docs/**, license, and readme list.
+  docs-paths: []
 
 test-evidence:
   # Read logs and parse jest, vitest, pytest, go test, cargo test, and junit summaries.
@@ -37,8 +45,8 @@ test-evidence:
   max-log-jobs: 20
   # error makes a failed test job report error so fail-on: error can catch it.
   require-passed: false
-  # warn (default) or error when no test-like job or check run exists on the head SHA.
-  no-evidence: warn
+  # info (default), warn, or error when no test-like job or check run exists on the head SHA.
+  no-evidence: info
   # Patterns are JavaScript regex. A leading (?i) turns on case-insensitive mode.
   # Defaults match test, unit, e2e, integration, jest, vitest, pytest, go test,
   # cargo test, junit, mocha, playwright, cypress, rspec, phpunit, ctest.

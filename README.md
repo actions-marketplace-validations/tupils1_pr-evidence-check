@@ -24,7 +24,7 @@ It finds linked issues from closing keywords (`Fixes #123`, including cross-repo
 
 It also calls out a large diff, a large file that does not match the issue, and a directory where several files are all outside the issue. Keyword overlap is not understanding. The comment shows the rule id and the words it used so you can disagree with it.
 
-Without a linked issue, files are marked **not compared**. Sensitive paths and a large diff are still reported.
+Without a linked issue, files are marked **not compared**. Sensitive paths and a large diff are still reported. That missing-issue signal is a warning, and it is recorded as info instead for bot authors (`dependabot`, `renovate`, and any login ending in `[bot]`), docs-only diffs, diffs that only match `ignore-paths`, and pull requests that carry a configured skip label.
 
 ### 2. Test evidence from CI that already ran
 
@@ -32,7 +32,7 @@ The action does **not** run tests. It reads check runs and Actions jobs for this
 
 jest, vitest, pytest, go test, cargo test, junit XML, or a Surefire `Tests run:` line.
 
-If nothing test-like finished, the comment says **no test evidence**. Logs that cannot be read still show the job conclusion. Raw logs are not pasted into the comment.
+If nothing test-like finished, the comment says **no test evidence** at info severity by default. Set `test-evidence.no-evidence` to `warn` or `error` to raise it. Logs that cannot be read still show the job conclusion. Raw logs are not pasted into the comment.
 
 Name patterns are configurable. Defaults match names such as `test`, `unit`, `e2e`, `jest`, `vitest`, `pytest`, `go test`, and `cargo test`. A job named only `lint` or `test-coverage` is not treated as test evidence. `jest coverage` is.
 
@@ -62,10 +62,10 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/pr-evidence-check@v0.1.0
+      - uses: tupils1/pr-evidence-check@main
 ```
 
-Replace `your-org/pr-evidence-check` with the repository that hosts this action. No config file. No checkout. Scope and the review packet are ready immediately. Test evidence is whatever CI has already finished for the head SHA. If tests are still running, the comment says that.
+Examples use `tupils1/pr-evidence-check@main`. This repository does not publish release tags. No config file. No checkout. Scope and the review packet are ready immediately. Test evidence is whatever CI has already finished for the head SHA. If tests are still running, the comment says that.
 
 To read logs from tests in the **same** workflow, run this after them and keep the comment even when tests fail:
 
@@ -75,7 +75,7 @@ To read logs from tests in the **same** workflow, run this after them and keep t
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/pr-evidence-check@v0.1.0
+      - uses: tupils1/pr-evidence-check@main
 ```
 
 More copies live in [`examples/`](examples/).
@@ -121,15 +121,16 @@ Default severities:
 | Situation | Severity |
 | --- | --- |
 | No linked issue | warn |
+| No linked issue, and the author is a bot, the diff is docs-only or only matches `ignore-paths`, or the pull request has a skip label | info |
 | Any file outside the issue | warn |
 | At least 3 judged files and at least half of them outside the issue | error |
 | Sensitive path the issue does not mention | warn |
 | Diff reaches 400 lines or 20 files | warn |
-| No test-like job or check on the SHA | warn |
+| No test-like job or check on the SHA | info |
 | A matched test job failed, timed out, or was cancelled | warn |
 | Review packet section missing, empty, or a placeholder | warn |
 
-`test-evidence.require-passed: true` raises a failed test job to error. `test-evidence.no-evidence: error` and `review-packet.incomplete: error` raise those warnings to errors. If you set `fail-on` and also mark this job required in branch protection, GitHub will block the merge. That is opt-in. The default does not.
+`test-evidence.require-passed: true` raises a failed test job to error. `test-evidence.no-evidence: warn` or `error` raises the default info for a missing test job. `review-packet.incomplete: error` raises an incomplete packet to an error. If you set `fail-on` and also mark this job required in branch protection, GitHub will block the merge. That is opt-in. The default does not.
 
 ## Optional config
 
@@ -152,10 +153,13 @@ scope:
   ignore-paths: []
   sensitive-paths: []
   ignore-sensitive-ids: []
+  no-linked-issue: warn # warn, info, or skip
+  skip-labels: []
+  docs-paths: []
 
 test-evidence:
   parse-logs: true
-  no-evidence: warn
+  no-evidence: info
   require-passed: false
 
 review-packet:

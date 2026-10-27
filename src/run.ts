@@ -125,7 +125,7 @@ export async function run(deps: {
 
 async function collectScope(
   client: GitHubClient,
-  pr: { number: number; title: string; body: string },
+  pr: { number: number; title: string; body: string; authorLogin: string; authorType: string; labels: string[] },
   context: { number: number },
   config: ReturnType<typeof loadConfig>,
   prRepo: string,
@@ -152,6 +152,9 @@ async function collectScope(
       files,
       issues,
       config: config.scope,
+      authorLogin: pr.authorLogin,
+      authorType: pr.authorType,
+      labels: pr.labels,
       ...(apiError ? { apiError } : {}),
     })
   } catch (error) {

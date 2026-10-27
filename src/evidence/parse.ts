@@ -2,8 +2,22 @@ import type { ParsedCounts } from '../types'
 
 const PRIORITY = ['cargo', 'jest', 'vitest', 'pytest', 'go', 'junit'] as const
 
+export function normalizeActionsLog(text: string): string {
+  const plain = text
+    .replace(/^\uFEFF/, '')
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+  return plain
+    .split('\n')
+    .map((line) => line
+      .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/, '')
+      .replace(/^(?:##\[(?:group|endgroup|command)\]|::(?:group|endgroup)::)/, ''))
+    .join('\n')
+}
+
 export function parseTestOutput(text: string): ParsedCounts | null {
-  const clean = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '')
+  const clean = normalizeActionsLog(text)
   const parsers: Record<(typeof PRIORITY)[number], (input: string) => ParsedCounts | null> = {
     cargo: parseCargo,
     jest: parseJest,

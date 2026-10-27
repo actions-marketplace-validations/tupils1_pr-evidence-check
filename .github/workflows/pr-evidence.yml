@@ -1,3 +1,7 @@
+# Self-test for this repository. uses: ./ runs the action from the checked-out
+# tree, so a pull_request run comments with the merge commit's action code.
+# workflow_run checks out the default branch and refreshes the same sticky
+# comment after CI finishes. There is no release tag; consumers use @main.
 name: PR evidence
 
 on:

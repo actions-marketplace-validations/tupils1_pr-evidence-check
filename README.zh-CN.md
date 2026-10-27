@@ -24,7 +24,7 @@
 
 diff 达到行数或文件数阈值、单个对不上的大文件、同一个目录下多份都对不上的文件，也会单独写出来。这不是语义理解。评论里有规则 id 和用到的词，你可以不同意。
 
-没有关联 issue 时，文件标成 **未对照**。敏感路径和大 diff 仍然会报。
+没有关联 issue 时，文件标成 **未对照**。敏感路径和大 diff 仍然会报。这条「没有关联 issue」默认是警告；作者是机器人（`dependabot`、`renovate`，或以 `[bot]` 结尾的登录名）、改动只有文档、改动只命中 `ignore-paths`，或 PR 带有配置的 skip label 时，降为 info。
 
 ### 2. 已有 CI 的测试证据
 
@@ -32,7 +32,7 @@ diff 达到行数或文件数阈值、单个对不上的大文件、同一个目
 
 jest、vitest、pytest、go test、cargo test、junit XML，以及 Surefire 的 `Tests run:` 行。
 
-这个 SHA 上没有像测试的 job 时，评论会写 **没有测试证据**。日志读不到时，仍然保留 job 结论。原始日志不会贴进评论。
+这个 SHA 上没有像测试的 job 时，评论会写 **没有测试证据**，默认是 info。要用 `test-evidence.no-evidence` 设成 `warn` 或 `error` 才会升高。日志读不到时，仍然保留 job 结论。原始日志不会贴进评论。
 
 job 名称模式可以改。默认能认出 `test`、`unit`、`e2e`、`jest`、`vitest`、`pytest`、`go test`、`cargo test` 这类名字。只叫 `lint` 或 `test-coverage` 的 job 不算测试证据。`jest coverage` 算。
 
@@ -62,10 +62,10 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/pr-evidence-check@v0.1.0
+      - uses: tupils1/pr-evidence-check@main
 ```
 
-把 `your-org/pr-evidence-check` 换成托管这个 action 的仓库。不需要配置文件，也不需要 checkout。范围和审查材料包马上就有。测试证据是这个 head SHA 上已经结束的 CI。测试还在跑，评论会写明。
+示例使用 `tupils1/pr-evidence-check@main`。这个仓库不发布 release tag。不需要配置文件，也不需要 checkout。范围和审查材料包马上就有。测试证据是这个 head SHA 上已经结束的 CI。测试还在跑，评论会写明。
 
 测试和这个 action 在同一个 workflow 里时，放在测试后面，测试失败也要评论：
 
@@ -75,7 +75,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/pr-evidence-check@v0.1.0
+      - uses: tupils1/pr-evidence-check@main
 ```
 
 更多例子在 [`examples/`](examples/)。
@@ -121,15 +121,16 @@ npm run demo
 | 情况 | 级别 |
 | --- | --- |
 | 没有关联 issue | warn |
+| 没有关联 issue，且作者是机器人、改动只有文档或只命中 `ignore-paths`、或 PR 带有 skip label | info |
 | 有文件超出 issue | warn |
 | 至少 3 个被判断的文件，且至少一半超出 issue | error |
 | issue 没提到的敏感路径 | warn |
 | diff 达到 400 行或 20 个文件 | warn |
-| 这个 SHA 上没有像测试的 job 或 check | warn |
+| 这个 SHA 上没有像测试的 job 或 check | info |
 | 命中的测试 job 失败、超时或取消 | warn |
 | 审查材料包缺节、过短或只有占位 | warn |
 
-`test-evidence.require-passed: true` 会把失败的测试 job 升为 error。`test-evidence.no-evidence: error` 和 `review-packet.incomplete: error` 会把对应警告升为 error。如果你设置了 `fail-on`，又在分支保护里把这个 job 标成必需，GitHub 会挡住合并。这是可选的。默认不会挡。
+`test-evidence.require-passed: true` 会把失败的测试 job 升为 error。`test-evidence.no-evidence: warn` 或 `error` 会把默认的 info（没有测试 job）升高。`review-packet.incomplete: error` 会把不完整的审查材料包升为 error。如果你设置了 `fail-on`，又在分支保护里把这个 job 标成必需，GitHub 会挡住合并。这是可选的。默认不会挡。
 
 ## 可选配置
 
@@ -152,10 +153,13 @@ scope:
   ignore-paths: []
   sensitive-paths: []
   ignore-sensitive-ids: []
+  no-linked-issue: warn # warn、info 或 skip
+  skip-labels: []
+  docs-paths: []
 
 test-evidence:
   parse-logs: true
-  no-evidence: warn
+  no-evidence: info
   require-passed: false
 
 review-packet:

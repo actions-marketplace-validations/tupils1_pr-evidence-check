@@ -18,4 +18,4 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/pr-evidence-check@v0.1.0
+      - uses: tupils1/pr-evidence-check@main

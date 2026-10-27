@@ -34108,6 +34108,9 @@ function defaultConfig() {
             extraSensitivePaths: [],
             disabledSensitiveIds: [],
             closingKeywords: [...DEFAULT_KEYWORDS],
+            noLinkedIssue: 'warn',
+            skipLabels: [],
+            docsPaths: [],
         },
         testEvidence: {
             jobNamePatterns: [...DEFAULT_JOB_PATTERNS],
@@ -34116,7 +34119,7 @@ function defaultConfig() {
             maxLogBytes: 1_500_000,
             maxLogJobs: 20,
             requirePassed: false,
-            noEvidence: 'warn',
+            noEvidence: 'info',
         },
         reviewPacket: {
             headings: defaultHeadings(),
@@ -34245,6 +34248,12 @@ function applyScope(config, value, warn) {
         'ignoreSensitiveIds',
         'closing-keywords',
         'closingKeywords',
+        'no-linked-issue',
+        'noLinkedIssue',
+        'skip-labels',
+        'skipLabels',
+        'docs-paths',
+        'docsPaths',
     ];
     warnUnknown(value, known, 'scope', warn);
     const lines = firstDefined(value, 'large-diff-lines', 'largeDiffLines');
@@ -34284,6 +34293,15 @@ function applyScope(config, value, warn) {
         }
         config.scope.closingKeywords = list;
     }
+    const noLinked = firstDefined(value, 'no-linked-issue', 'noLinkedIssue');
+    if (noLinked !== undefined)
+        config.scope.noLinkedIssue = expectNoLinkedIssue(noLinked);
+    const skipLabels = firstDefined(value, 'skip-labels', 'skipLabels');
+    if (skipLabels !== undefined)
+        config.scope.skipLabels = expectStringArray('scope.skip-labels', skipLabels);
+    const docsPaths = firstDefined(value, 'docs-paths', 'docsPaths');
+    if (docsPaths !== undefined)
+        config.scope.docsPaths = expectStringArray('scope.docs-paths', docsPaths);
 }
 function applyEvidence(config, value, warn) {
     if (!isRecord(value))
@@ -34332,7 +34350,7 @@ function applyEvidence(config, value, warn) {
     }
     const noEvidence = firstDefined(value, 'no-evidence', 'noEvidence');
     if (noEvidence !== undefined)
-        config.testEvidence.noEvidence = expectSeverity(noEvidence, 'test-evidence.no-evidence');
+        config.testEvidence.noEvidence = expectNotice(noEvidence, 'test-evidence.no-evidence');
 }
 function applyPacket(config, value, warn) {
     if (!isRecord(value))
@@ -34379,6 +34397,24 @@ function expectSeverity(value, label) {
     if (value === 'error')
         return 'error';
     throw new errors_1.ActionFailure('misconfigured', `${label} must be warn or error.`);
+}
+function expectNotice(value, label) {
+    if (value === 'info')
+        return 'info';
+    if (value === 'warn' || value === 'warning')
+        return 'warn';
+    if (value === 'error')
+        return 'error';
+    throw new errors_1.ActionFailure('misconfigured', `${label} must be info, warn, or error.`);
+}
+function expectNoLinkedIssue(value) {
+    if (value === 'warn' || value === 'warning')
+        return 'warn';
+    if (value === 'info')
+        return 'info';
+    if (value === 'skip' || value === 'off' || value === 'none')
+        return 'skip';
+    throw new errors_1.ActionFailure('misconfigured', 'scope.no-linked-issue must be warn, info, or skip.');
 }
 function expectLanguage(value, label) {
     if (typeof value !== 'string')
@@ -34543,6 +34579,7 @@ exports.GitHubHttpError = GitHubHttpError;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeActionsLog = normalizeActionsLog;
 exports.parseTestOutput = parseTestOutput;
 exports.parseJest = parseJest;
 exports.parseVitest = parseVitest;
@@ -34551,8 +34588,21 @@ exports.parseGo = parseGo;
 exports.parseCargo = parseCargo;
 exports.parseJunit = parseJunit;
 const PRIORITY = ['cargo', 'jest', 'vitest', 'pytest', 'go', 'junit'];
+function normalizeActionsLog(text) {
+    const plain = text
+        .replace(/^\uFEFF/, '')
+        .replace(/\x1b\[[0-9;]*m/g, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+    return plain
+        .split('\n')
+        .map((line) => line
+        .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/, '')
+        .replace(/^(?:##\[(?:group|endgroup|command)\]|::(?:group|endgroup)::)/, ''))
+        .join('\n');
+}
 function parseTestOutput(text) {
-    const clean = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
+    const clean = normalizeActionsLog(text);
     const parsers = {
         cargo: parseCargo,
         jest: parseJest,
@@ -34941,6 +34991,7 @@ function createGitHubClient(options) {
             if (!record || !headSha || !baseSha) {
                 throw new errors_1.GitHubHttpError(200, 'Pull request response was missing head or base SHA.');
             }
+            const user = (0, text_1.asRecord)(record.user);
             return {
                 number,
                 title: (0, text_1.asString)(record.title) ?? '',
@@ -34948,6 +34999,9 @@ function createGitHubClient(options) {
                 headSha,
                 baseSha,
                 baseRef: (0, text_1.asString)(base?.ref) ?? '',
+                authorLogin: (0, text_1.asString)(user?.login) ?? '',
+                authorType: (0, text_1.asString)(user?.type) ?? '',
+                labels: readLabels(record.labels),
             };
         },
         async getRepoFile(path, ref) {
@@ -35209,6 +35263,22 @@ function commentRef(value) {
         id: (0, text_1.asNumber)(record?.id) ?? 0,
         url: (0, text_1.asString)(record?.html_url) ?? '',
     };
+}
+function readLabels(value) {
+    if (!Array.isArray(value))
+        return [];
+    const names = [];
+    for (const item of value) {
+        if (typeof item === 'string') {
+            if (item.trim())
+                names.push(item.trim());
+            continue;
+        }
+        const name = (0, text_1.asString)((0, text_1.asRecord)(item)?.name);
+        if (name)
+            names.push(name);
+    }
+    return names;
 }
 function splitRepo(repo, fallbackOwner, fallbackName) {
     const [owner, name] = repo.split('/');
@@ -35777,14 +35847,56 @@ function explainSensitive(item, lang) {
         ? `\`scope.sensitive\` — 敏感路径（${reason}，模式 \`${(0, text_1.cell)(item.pattern)}\`）。关联 issue 没有提到这个路径。`
         : `\`scope.sensitive\` — Sensitive path (${reason}, pattern \`${(0, text_1.cell)(item.pattern)}\`). No linked issue mentions this path.`;
 }
+function quietNoIssueNote(signal, lang) {
+    if (signal.level !== 'info' || !signal.quiet)
+        return '';
+    const detail = (0, text_1.cell)(signal.quietDetail ?? '');
+    if (lang === 'zh') {
+        switch (signal.quiet) {
+            case 'bot':
+                return `因为作者是机器人（\`${detail}\`），所以这条记为 info，不计入警告。`;
+            case 'docs':
+                return '因为改动的文件全是文档，所以这条记为 info，不计入警告。';
+            case 'ignored':
+                return '因为改动的文件都命中了 `ignore-paths`，所以这条记为 info，不计入警告。';
+            case 'docs_or_ignored':
+                return '因为改动的文件要么是文档，要么命中了 `ignore-paths`，所以这条记为 info，不计入警告。';
+            case 'label':
+                return `因为 PR 带有跳过标签 \`${detail}\`，所以这条记为 info，不计入警告。`;
+            case 'config':
+                return '因为配置 `scope.no-linked-issue` 是 `info`，所以这条记为 info，不计入警告。';
+            default:
+                return '';
+        }
+    }
+    switch (signal.quiet) {
+        case 'bot':
+            return `Recorded as info, not a warning, because the author is a bot (\`${detail}\`).`;
+        case 'docs':
+            return 'Recorded as info, not a warning, because every changed file is documentation.';
+        case 'ignored':
+            return 'Recorded as info, not a warning, because every changed file matches `ignore-paths`.';
+        case 'docs_or_ignored':
+            return 'Recorded as info, not a warning, because every changed file is documentation or matches `ignore-paths`.';
+        case 'label':
+            return `Recorded as info, not a warning, because the pull request has the skip label \`${detail}\`.`;
+        case 'config':
+            return 'Recorded as info, not a warning, because `scope.no-linked-issue` is `info`.';
+        default:
+            return '';
+    }
+}
 function renderScopeSignal(signal, lang) {
     switch (signal.id) {
         case 'scope.no_files':
             return lang === 'zh' ? '`scope.no_files` — 这个 PR 没有改文件。' : '`scope.no_files` — This pull request changes no files.';
-        case 'scope.no_linked_issue':
-            return lang === 'zh'
+        case 'scope.no_linked_issue': {
+            const base = lang === 'zh'
                 ? '`scope.no_linked_issue` — 没有关联 issue，范围检查只能标出敏感路径和大 diff。'
                 : '`scope.no_linked_issue` — No linked issue. Scope can still flag sensitive paths and a large diff, but not unrelated files.';
+            const note = quietNoIssueNote(signal, lang);
+            return note ? `${base} ${note}` : base;
+        }
         case 'scope.issue_unreadable':
             return lang === 'zh'
                 ? `\`scope.issue_unreadable\` — 关联的 ${signal.issues.join(', ')} 正文读不到，范围判断可能偏严。`
@@ -36101,6 +36213,9 @@ async function collectScope(client, pr, context, config, prRepo) {
             files,
             issues,
             config: config.scope,
+            authorLogin: pr.authorLogin,
+            authorType: pr.authorType,
+            labels: pr.labels,
             ...(apiError ? { apiError } : {}),
         });
     }
@@ -36201,6 +36316,7 @@ exports.analyzeScope = analyzeScope;
 exports.scopeStatus = scopeStatus;
 exports.skippedScope = skippedScope;
 const text_1 = __nccwpck_require__(8992);
+const author_1 = __nccwpck_require__(933);
 const links_1 = __nccwpck_require__(3189);
 const sensitive_1 = __nccwpck_require__(1712);
 const tokenize_1 = __nccwpck_require__(9203);
@@ -36387,8 +36503,11 @@ function collectSignals(files, input, keywords, refs, additions, deletions) {
         signals.push({ id: 'scope.no_files', level: 'info' });
         return signals;
     }
-    if (input.issues.length === 0)
-        signals.push({ id: 'scope.no_linked_issue', level: 'warn' });
+    if (input.issues.length === 0) {
+        const missing = noLinkedIssueSignal(input, files);
+        if (missing)
+            signals.push(missing);
+    }
     const unreadable = input.issues.filter((issue) => issue.unreadable);
     if (input.issues.length > 0 && unreadable.length === input.issues.length) {
         signals.push({
@@ -36467,6 +36586,92 @@ function collectSignals(files, input, keywords, refs, additions, deletions) {
         signals.push({ id: 'scope.sensitive', level: 'warn', files: surprise });
     }
     return signals;
+}
+function noLinkedIssueSignal(input, files) {
+    if (input.config.noLinkedIssue === 'skip')
+        return undefined;
+    if (input.config.noLinkedIssue === 'info') {
+        return { id: 'scope.no_linked_issue', level: 'info', quiet: 'config' };
+    }
+    const label = (0, author_1.matchingSkipLabel)(input.labels ?? [], input.config.skipLabels);
+    if (label)
+        return { id: 'scope.no_linked_issue', level: 'info', quiet: 'label', quietDetail: label };
+    if ((0, author_1.isBotAuthor)(input.authorLogin, input.authorType)) {
+        const detail = (input.authorLogin ?? '').trim() || (input.authorType ?? '').trim();
+        return {
+            id: 'scope.no_linked_issue',
+            level: 'info',
+            quiet: 'bot',
+            ...(detail ? { quietDetail: detail } : {}),
+        };
+    }
+    const filesReason = quietFilesReason(files, input.config);
+    if (filesReason)
+        return { id: 'scope.no_linked_issue', level: 'info', quiet: filesReason };
+    return { id: 'scope.no_linked_issue', level: 'warn' };
+}
+function quietFilesReason(files, config) {
+    if (files.length === 0)
+        return undefined;
+    let sawDocs = false;
+    let sawIgnoredOnly = false;
+    for (const file of files) {
+        const names = [file.filename, file.previousFilename].filter((name) => Boolean(name));
+        let fileDocs = false;
+        let fileIgnored = false;
+        for (const name of names) {
+            const docs = (0, sensitive_1.matchDocs)(name, config.docsPaths) != null;
+            const ignored = (0, sensitive_1.matchIgnore)(name, config.ignorePaths) != null;
+            if (!docs && !ignored)
+                return undefined;
+            if (docs)
+                fileDocs = true;
+            if (ignored)
+                fileIgnored = true;
+        }
+        if (fileDocs)
+            sawDocs = true;
+        else if (fileIgnored)
+            sawIgnoredOnly = true;
+    }
+    if (sawDocs && sawIgnoredOnly)
+        return 'docs_or_ignored';
+    if (sawDocs)
+        return 'docs';
+    return 'ignored';
+}
+
+
+/***/ }),
+
+/***/ 933:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isBotAuthor = isBotAuthor;
+exports.matchingSkipLabel = matchingSkipLabel;
+function isBotAuthor(login, userType) {
+    if ((userType ?? '').trim().toLowerCase() === 'bot')
+        return true;
+    const name = (login ?? '').trim();
+    if (!name)
+        return false;
+    if (/\[bot\]$/i.test(name))
+        return true;
+    return /^(dependabot|renovate)$/i.test(name);
+}
+function matchingSkipLabel(labels, skipLabels) {
+    const wanted = new Set(skipLabels.map((label) => label.trim().toLowerCase()).filter((label) => label.length > 0));
+    if (wanted.size === 0)
+        return undefined;
+    for (const label of labels) {
+        const trimmed = label.trim();
+        if (wanted.has(trimmed.toLowerCase()))
+            return trimmed;
+    }
+    return undefined;
 }
 
 
@@ -36571,10 +36776,11 @@ function issueText(issue) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BUILTIN_SENSITIVE = void 0;
+exports.DEFAULT_DOCS_GLOBS = exports.BUILTIN_SENSITIVE = void 0;
 exports.activeSensitiveRules = activeSensitiveRules;
 exports.matchSensitive = matchSensitive;
 exports.matchIgnore = matchIgnore;
+exports.matchDocs = matchDocs;
 const minimatch_1 = __nccwpck_require__(6507);
 const tokenize_1 = __nccwpck_require__(9203);
 exports.BUILTIN_SENSITIVE = [
@@ -36706,6 +36912,33 @@ exports.BUILTIN_SENSITIVE = [
         ],
     },
 ];
+exports.DEFAULT_DOCS_GLOBS = [
+    '**/*.md',
+    '**/*.mdx',
+    '**/*.markdown',
+    '**/*.rst',
+    '**/*.adoc',
+    '**/*.asciidoc',
+    '**/docs/**',
+    '**/doc/**',
+    '**/changelog',
+    '**/changelog.*',
+    '**/changes',
+    '**/changes.*',
+    '**/license',
+    '**/license.*',
+    '**/licence',
+    '**/licence.*',
+    '**/authors',
+    '**/authors.*',
+    '**/contributing',
+    '**/contributing.*',
+    '**/.github/issue_template/**',
+    '**/.github/pull_request_template.md',
+    '**/.github/pull_request_template/**',
+    '**/readme',
+    '**/readme.*',
+];
 const MATCH_OPTIONS = { dot: true, nocase: true };
 function activeSensitiveRules(disabledIds, extraPaths) {
     const disabled = new Set(disabledIds);
@@ -36745,6 +36978,9 @@ function matchIgnore(filename, patterns) {
             return pattern;
     }
     return undefined;
+}
+function matchDocs(filename, extraPatterns) {
+    return matchIgnore(filename, [...exports.DEFAULT_DOCS_GLOBS, ...extraPatterns]);
 }
 function mentionFor(filename, issueTexts) {
     for (const text of issueTexts) {

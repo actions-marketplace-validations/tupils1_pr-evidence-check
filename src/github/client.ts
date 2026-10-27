@@ -16,6 +16,9 @@ export interface PullRequestInfo {
   headSha: string
   baseSha: string
   baseRef: string
+  authorLogin: string
+  authorType: string
+  labels: string[]
 }
 
 export interface GitHubClient {
@@ -73,6 +76,7 @@ export function createGitHubClient(options: {
       if (!record || !headSha || !baseSha) {
         throw new GitHubHttpError(200, 'Pull request response was missing head or base SHA.')
       }
+      const user = asRecord(record.user)
       return {
         number,
         title: asString(record.title) ?? '',
@@ -80,6 +84,9 @@ export function createGitHubClient(options: {
         headSha,
         baseSha,
         baseRef: asString(base?.ref) ?? '',
+        authorLogin: asString(user?.login) ?? '',
+        authorType: asString(user?.type) ?? '',
+        labels: readLabels(record.labels),
       }
     },
 
@@ -360,6 +367,20 @@ function commentRef(value: unknown): { id: number; url: string } {
     id: asNumber(record?.id) ?? 0,
     url: asString(record?.html_url) ?? '',
   }
+}
+
+function readLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const names: string[] = []
+  for (const item of value) {
+    if (typeof item === 'string') {
+      if (item.trim()) names.push(item.trim())
+      continue
+    }
+    const name = asString(asRecord(item)?.name)
+    if (name) names.push(name)
+  }
+  return names
 }
 
 function splitRepo(repo: string, fallbackOwner: string, fallbackName: string): [string, string] {

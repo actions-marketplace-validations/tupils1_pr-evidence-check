@@ -132,6 +132,34 @@ export const BUILTIN_SENSITIVE: readonly SensitiveRule[] = [
   },
 ]
 
+export const DEFAULT_DOCS_GLOBS = [
+  '**/*.md',
+  '**/*.mdx',
+  '**/*.markdown',
+  '**/*.rst',
+  '**/*.adoc',
+  '**/*.asciidoc',
+  '**/docs/**',
+  '**/doc/**',
+  '**/changelog',
+  '**/changelog.*',
+  '**/changes',
+  '**/changes.*',
+  '**/license',
+  '**/license.*',
+  '**/licence',
+  '**/licence.*',
+  '**/authors',
+  '**/authors.*',
+  '**/contributing',
+  '**/contributing.*',
+  '**/.github/issue_template/**',
+  '**/.github/pull_request_template.md',
+  '**/.github/pull_request_template/**',
+  '**/readme',
+  '**/readme.*',
+]
+
 const MATCH_OPTIONS = { dot: true, nocase: true }
 
 export function activeSensitiveRules(disabledIds: readonly string[], extraPaths: readonly string[]): SensitiveRule[] {
@@ -176,6 +204,10 @@ export function matchIgnore(filename: string, patterns: readonly string[]): stri
     if (minimatch(normalized, pattern, MATCH_OPTIONS)) return pattern
   }
   return undefined
+}
+
+export function matchDocs(filename: string, extraPatterns: readonly string[]): string | undefined {
+  return matchIgnore(filename, [...DEFAULT_DOCS_GLOBS, ...extraPatterns])
 }
 
 function mentionFor(filename: string, issueTexts: readonly string[]): string | undefined {
